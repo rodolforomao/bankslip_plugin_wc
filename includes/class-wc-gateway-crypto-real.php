@@ -6,6 +6,9 @@ if (!defined('ABSPATH')) {
 class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
 {
 
+    protected $TIMEOUT_CHECK_PAYMENT_SECONDS = 90;
+    protected $TIMEOUT_GENERATE_DEPIX = 30;
+
 
     public function __construct()
     {
@@ -231,7 +234,7 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
             // YOUR TEST/SANDBOX API URL
             $api_url = 'http://localhost:8000/api/integrated-payment';
         }
-        
+
         // Prepare the POST data (instead of URL parameters)
         $post_data = array(
             'description' => $description,
@@ -243,31 +246,25 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
             'origin' => $originRequest,
             'ip_origin' => $server_ip
         );
-        
+
         error_log('url: ' . $api_url);
 
-
         $response = wp_remote_post($api_url, array(
-            'timeout' => 30, // Set timeout to 30 seconds
-            'body'    => $post_data, // Send data as POST body
+            'timeout' => $this->TIMEOUT_GENERATE_DEPIX, 
+            'body'    => $post_data, 
             'headers' => array(
-                'Content-Type' => 'application/x-www-form-urlencoded', // Send as form data
+                'Content-Type' => 'application/x-www-form-urlencoded', 
             ),
         ));
 
         if (is_wp_error($response)) {
             $error_message = $response->get_error_message();
-            // Lógica para lidar com o erro
             error_log('Depix API Error: ' . $error_message);
         } else {
-            // Lógica para processar a resposta
             $body = wp_remote_retrieve_body($response);
-            // Processar a resposta da API
         }
-        //$response = wp_remote_get($api_url);
 
         if (is_wp_error($response)) {
-            // Log the error for debugging.  Use error_log() for server-side logging.
             error_log('Depix API Error: ' . $response->get_error_message());
             return new WP_Error('payment_error', sprintf(__("Error generating Pix payment: %s", 'crypto-real-depix'), $response->get_error_message()));
         }
@@ -281,17 +278,12 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
             return new WP_Error('payment_error', __('Error processing payment, invalid API response.', 'crypto-real-depix'));
         }
 
-        // Check for a specific error indicator from the API (adjust based on your API's response format)
         if (isset($data['error'])) {
             error_log('Depix API Error: ' . $data['error']);
             return new WP_Error('payment_error', sprintf(__('Error from Depix API: %s', 'crypto-real-depix'), $data['error']));
         }
 
-        // error_log('Data: ' . print_r($data, true));
-
-
         if (isset($data['pix']['data']['response']['qrCopyPaste'])) {
-            // Return the entire data array, not just the QR code.  This allows for more flexibility.
             error_log('Returning success ');
             return $data;
         } else {
@@ -519,7 +511,16 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
                     $.ajax({
                         url: "/wp-json/crypto-real-depix/v1/check-payment?depixId=' . urlencode($depixid) . '&orderId=' . urlencode($order_id) . '" ,
                         method: "GET",
+                        contentType: "application/json", // Explicitly set JSON
+                        dataType: "json", // Expect JSON response
+                        timeout: ' . $this->TIMEOUT_CHECK_PAYMENT_SECONDS * 1000 . ',
                         success: function(response) { 
+                            console.log("Raw response:", response);
+                            if (typeof response === "string") {
+                                response = JSON.parse(response);
+                            }
+                            console.log("Parsed response:", response);
+                            globalResponse = response;
                             if (response.success && response.response) {
                                 const status = response.response[0].status; // Extract the status
                                 if (status === "paid") {
@@ -527,10 +528,11 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
                                 }
                                 else
                                 {
-                                    displayAlert("Not paid yet.", "alert-danger");
+                                displayAlert("Pagamento não confirmado. nº 1001", "alert-warning");
+
                                 }
                             } else {
-                                displayAlert("Pagamento não confirmado.", "alert-warning");
+                                displayAlert("Pagamento não confirmado. nº 1002", "alert-warning");
                             }
                             clicked = false;
                             document.getElementById("waiting-payment").innerHTML = "Verificar pagamento";

@@ -4,7 +4,7 @@
  * Plugin Name: Crypto Real Depix
  * Plugin URI: https://www.rodolforomao.com.br
  * Description: Plugin de pagamento em criptomoedas para WooCommerce - Pagamentos através do Pix usando a moeda Depix.
- * Version: 1.0.1
+ * Version: 0.01.001
  * Author: Rodolfo Romão
  * Author URI: https://www.rodolforomao.com.br
  * License: GPL2
@@ -105,20 +105,31 @@ add_action('rest_api_init', function () {
     register_rest_route('crypto-real-depix/v1', '/check-payment', [
         'methods' => 'GET',
         'callback' => function (WP_REST_Request $request) {
-            error_log('called: crypto-real-depix/v1/check-payment');
             $depixId = $request->get_param('depixId');
             $orderId = $request->get_param('orderId');
             $production = get_option('production', 'no'); // ✅ Correct way to fetch option
+
+            error_log("Received request with depixId: {$depixId} and orderId: {$orderId}");
+
             if ($production === 'yes') {
                 $url = "https://rodolforomao.com.br/finances/public/check-bank-slip-paid-by-id?depixId={$depixId}&orderId={$orderId}";
             } else {
                 $url = "http://localhost:8000/check-bank-slip-paid-by-id?depixId={$depixId}&orderId={$orderId}";
             }
             $args = [
-                'timeout' => 30
+                'timeout' => 90
             ];
             $response = wp_remote_get($url, $args);
-            return rest_ensure_response(wp_remote_retrieve_body($response));
+
+            if (is_wp_error($response)) {
+                error_log("Request failed: " . print_r($response->get_error_message(), true));
+                return new WP_Error('request_failed', 'Request failed', ['status' => 500]);
+            }
+
+            $body = wp_remote_retrieve_body($response);
+            error_log("Response body: " . print_r($body, true));
+
+            return rest_ensure_response($body);
         }
     ]);
 });
