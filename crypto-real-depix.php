@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Plugin Name: Crypto Real Depix
  * Plugin URI: https://www.rodolforomao.com.br
@@ -24,14 +25,16 @@ if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get
 /**
  * Display a notice if WooCommerce is missing.
  */
-function crypto_real_depix_woocommerce_missing_notice() {
+function crypto_real_depix_woocommerce_missing_notice()
+{
     echo '<div class="error"><p><strong>' . esc_html__('Crypto Real Depix requires WooCommerce to be installed and active.', 'crypto-real-depix') . '</strong></p></div>';
 }
 
 /**
  * Load the payment gateway class.  This is done inside a function hooked to 'plugins_loaded'.
  */
-function crypto_real_depix_init() {
+function crypto_real_depix_init()
+{
     if (!class_exists('WC_Payment_Gateway')) {
         // WooCommerce is not loaded.  We've already handled this, but this is a safety check.
         return;
@@ -51,7 +54,8 @@ add_action('plugins_loaded', 'crypto_real_depix_init', 0); // Priority 0 ensures
  * @param array $gateways The existing list of payment gateways.
  * @return array The updated list of payment gateways.
  */
-function crypto_real_depix_add_gateway($gateways) {
+function crypto_real_depix_add_gateway($gateways)
+{
     error_log('Adding Crypto Real Depix Gateway to WooCommerce.');
     $gateways[] = 'WC_Gateway_Crypto_Real'; // Add the class name here.
     return $gateways;
@@ -60,15 +64,17 @@ function crypto_real_depix_add_gateway($gateways) {
 /**
  * Load plugin textdomain.
  */
-function crypto_real_depix_load_textdomain() {
-  load_plugin_textdomain( 'crypto-real-depix', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
+function crypto_real_depix_load_textdomain()
+{
+    load_plugin_textdomain('crypto-real-depix', false, dirname(plugin_basename(__FILE__)) . '/languages');
 }
-add_action( 'init', 'crypto_real_depix_load_textdomain' );
+add_action('init', 'crypto_real_depix_load_textdomain');
 
 /**
  * Add settings link on plugin page
  */
- function crypto_real_depix_settings_link($links) {
+function crypto_real_depix_settings_link($links)
+{
     $settings_link = '<a href="admin.php?page=wc-settings&tab=checkout&section=crypto_real_depix">' . __('Settings', 'crypto-real-depix') . '</a>';
     array_unshift($links, $settings_link);
     return $links;
@@ -78,9 +84,10 @@ $plugin = plugin_basename(__FILE__);
 add_filter("plugin_action_links_$plugin", 'crypto_real_depix_settings_link');
 
 
-add_action( 'woocommerce_before_checkout_form', 'crypto_real_force_payment_methods_refresh', 0 );
+add_action('woocommerce_before_checkout_form', 'crypto_real_force_payment_methods_refresh', 0);
 
-function crypto_real_force_payment_methods_refresh() {
+function crypto_real_force_payment_methods_refresh()
+{
     WC()->payment_gateways()->init(); // Re-initialize payment gateways
 }
 
@@ -90,14 +97,35 @@ add_action('rest_api_init', function () {
         'methods'  => 'POST',
         'callback' => 'crypto_real_depix_webhook_handler',
         'permission_callback' => function (WP_REST_Request $request) {
-            $password = $request->get_header('X-API-KEY'); // Captura a chave do cabeçalho
-            return $password === 'sdkfjlkadsjfl3kj45342k4j5kjasdfasdflkj456435yt'; // Substitua pelo seu password
+            $password = $request->get_header('X-API-KEY'); // Capture the key from the header
+            return $password === 'sdkfjlkadsjfl3kj45342k4j5kjasdfasdflkj456435yt'; // Replace with your actual password
         },
+    ]);
+
+    register_rest_route('crypto-real-depix/v1', '/check-payment', [
+        'methods' => 'GET',
+        'callback' => function (WP_REST_Request $request) {
+            error_log('called: crypto-real-depix/v1/check-payment');
+            $depixId = $request->get_param('depixId');
+            $orderId = $request->get_param('orderId');
+            $production = get_option('production', 'no'); // ✅ Correct way to fetch option
+            if ($production === 'yes') {
+                $url = "https://rodolforomao.com.br/finances/public/check-bank-slip-paid-by-id?depixId={$depixId}&orderId={$orderId}";
+            } else {
+                $url = "http://localhost:8000/check-bank-slip-paid-by-id?depixId={$depixId}&orderId={$orderId}";
+            }
+            $args = [
+                'timeout' => 30
+            ];
+            $response = wp_remote_get($url, $args);
+            return rest_ensure_response(wp_remote_retrieve_body($response));
+        }
     ]);
 });
 
 // Webhook handler function
-function crypto_real_depix_webhook_handler(WP_REST_Request $request) {
+function crypto_real_depix_webhook_handler(WP_REST_Request $request)
+{
     error_log('webhook - crypto_real_depix_webhook_handler - called.');
 
     $data = $request->get_json_params();
@@ -142,7 +170,8 @@ function crypto_real_depix_webhook_handler(WP_REST_Request $request) {
     ], 200);
 }
 
-add_action('init', function() {
+
+add_action('init', function () {
     error_log('flush_rewrite_rules.');
     flush_rewrite_rules();
 });

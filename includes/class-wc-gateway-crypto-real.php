@@ -356,7 +356,7 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
     </button>
     
     <div id="pixModal" class="modal" style="display:block;">
-        <div class="modal-content">
+        <div class="modal-content" style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
             <span class="close" id="closeModal">&times;</span>
             <h3>' . __('Pix Payment QR Code', 'crypto-real-depix') . '</h3>
             <img src="' . esc_url($qr_code_url) . '" alt="Pix Payment QR Code" style="max-width: 100%; height: auto;"/>
@@ -415,7 +415,7 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
 
         $production = $this->production === 'yes'; // Check the production mode setting
         if ($production) {
-            $api_url_base_url = "http://rodolforomao.com.br/finances/public";
+            $api_url_base_url = "https://rodolforomao.com.br/finances/public";
         } else {
             $api_url_base_url = "http://localhost:8000";
         }
@@ -517,6 +517,28 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
     
     
                     $.ajax({
+                        url: "/wp-json/crypto-real-depix/v1/check-payment?depixId=' . urlencode($depixid) . '&orderId=' . urlencode($order_id) . '" ,
+                        method: "GET",
+                        success: function(response) { 
+                            if (response.success && response.response) {
+                                const status = response.response[0].status; // Extract the status
+                                if (status === "paid") {
+                                    displayAlert("Paid successful.", "alert-success");
+                                }
+                                else
+                                {
+                                    displayAlert("Not paid yet.", "alert-danger");
+                                }
+                            } else {
+                                displayAlert("Pagamento não confirmado.", "alert-warning");
+                            }
+                            clicked = false;
+                            document.getElementById("waiting-payment").innerHTML = "Verificar pagamento";
+                            document.getElementById("waiting-payment").disabled = false;
+                        }
+                    });
+                    /*
+                    $.ajax({
                         url: "' . $api_url_base_url . '/check-bank-slip-paid-by-id?depixId=' . urlencode($depixid) . '&orderId=' . urlencode($order_id) . '",
                         method: "GET",
                         contentType: "application/json", // Set content type to JSON
@@ -532,10 +554,11 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
                                 }
                                 else
                                 {
-                                    displayAlert("Not paid yet.", "alert-danger");
+                                    displayAlert("Pagamento não confirmado. nº 01001", "alert-danger");
+
                                 }
                             } else {
-                                alert("Pagamento não confirmado. Tente novamente.");
+                                displayAlert("Pagamento não confirmado. nº 01002", "alert-danger");
                             }
                             clicked = false;
                             document.getElementById("waiting-payment").innerHTML = "Verificar pagamento";
@@ -548,6 +571,7 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
                             document.getElementById("waiting-payment").disabled = false;
                         }
                     });
+                    */
                 }
             });
         </script>
@@ -567,6 +591,10 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
         .alert-success {
             background-color: green;
             color: white;
+        }
+        .alert-warning{
+            background-color: yellow;
+            color: black;
         }
         </style>';
     }
