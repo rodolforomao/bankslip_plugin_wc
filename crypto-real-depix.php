@@ -4,8 +4,8 @@
  * Plugin Name: Crypto Real Depix
  * Plugin URI: https://www.rodolforomao.com.br
  * Description: Plugin de pagamento em criptomoedas para WooCommerce - Pagamentos através do Pix usando a moeda Depix.
- * Version: 0.01.002
- * Author: Rodolfo Romão
+ * Version: 0.01.003c
+ * Author: Strong Head
  * Author URI: https://www.rodolforomao.com.br
  * License: GPL2
  * Text Domain: crypto-real-depix
@@ -15,6 +15,14 @@
 if (!defined('ABSPATH')) {
     exit; // Exit if accessed directly.
 }
+
+
+$DEBUG_CONSTRUCTOR = true;
+$DEBUG_INITIALIZATION = true;
+$DEBUG_CALLS_FUNCTION = true;
+$DEBUG_GENERAL = true;
+$DEBUG_API = true;
+
 
 // Check if WooCommerce is active.  This is the correct way to do dependency checks.
 if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get_option('active_plugins')))) {
@@ -56,7 +64,10 @@ add_action('plugins_loaded', 'crypto_real_depix_init', 0); // Priority 0 ensures
  */
 function crypto_real_depix_add_gateway($gateways)
 {
-    error_log('Adding Crypto Real Depix Gateway to WooCommerce.');
+    global $DEBUG_GENERAL;
+    if ($DEBUG_GENERAL) {
+        error_log('Adding Crypto Real Depix Gateway to WooCommerce.');
+    }
     $gateways[] = 'WC_Gateway_Crypto_Real'; // Add the class name here.
     return $gateways;
 }
@@ -107,9 +118,14 @@ add_action('rest_api_init', function () {
         'callback' => function (WP_REST_Request $request) {
             $depixId = $request->get_param('depixId');
             $orderId = $request->get_param('orderId');
-            $production = get_option('production', 'no'); // ✅ Correct way to fetch option
+            $gateway_settings = get_option('woocommerce_crypto_real_depix_settings', []);
+            $production = isset($gateway_settings['production']) ? $gateway_settings['production'] : 'no';
 
-            error_log("Received request with depixId: {$depixId} and orderId: {$orderId}");
+
+            global $DEBUG_API;
+            if ($DEBUG_API) {
+                error_log("Received request with depixId: {$depixId}, orderId: {$orderId} and production: {$production}");
+            }
 
             if ($production === 'yes') {
                 $url = "https://rodolforomao.com.br/finances/public/check-bank-slip-paid-by-id?depixId={$depixId}&orderId={$orderId}";
@@ -119,6 +135,10 @@ add_action('rest_api_init', function () {
             $args = [
                 'timeout' => 90
             ];
+            if ($DEBUG_API) {
+                error_log("url: {$url}");
+            }
+
             $response = wp_remote_get($url, $args);
 
             if (is_wp_error($response)) {
@@ -127,7 +147,9 @@ add_action('rest_api_init', function () {
             }
 
             $body = wp_remote_retrieve_body($response);
-            error_log("Response body: " . print_r($body, true));
+            if ($DEBUG_API) {
+                error_log("Response body: " . print_r($body, true));
+            }
 
             return rest_ensure_response($body);
         }
@@ -137,13 +159,18 @@ add_action('rest_api_init', function () {
 // Webhook handler function
 function crypto_real_depix_webhook_handler(WP_REST_Request $request)
 {
-    error_log('webhook - crypto_real_depix_webhook_handler - called.');
+    global $DEBUG_CALLS_FUNCTION;
+    if ($DEBUG_CALLS_FUNCTION) {
+        error_log('webhook - crypto_real_depix_webhook_handler - called.');
+    }
 
     $data = $request->get_json_params();
 
-    // Log the webhook data for debugging
-    error_log("Received Webhook Data: " . print_r($data, true));
-    file_put_contents(__DIR__ . '/webhook_log.txt', json_encode($data, JSON_PRETTY_PRINT), FILE_APPEND);
+    global $DEBUG_API;
+    if ($DEBUG_API) {
+        error_log("Received Webhook Data: " . print_r($data, true));
+        file_put_contents(__DIR__ . '/webhook_log.txt', json_encode($data, JSON_PRETTY_PRINT), FILE_APPEND);
+    }
 
     // Validate that the expected keys exist in the data
     if (!isset($data['transaction_id']) || !isset($data['order_id']) || !isset($data['status'])) {
@@ -174,6 +201,13 @@ function crypto_real_depix_webhook_handler(WP_REST_Request $request)
 
     $updated_status = $order->get_status();
 
+    if ($DEBUG_API) {
+        error_log("Received Webhook Data: " . print_r(new WP_REST_Response([
+            "status" => "success",
+            "message" => "Order status updated",
+            "updated_status" => $updated_status  // Include the updated status in the response
+        ], 200), true));
+    }
     return new WP_REST_Response([
         "status" => "success",
         "message" => "Order status updated",

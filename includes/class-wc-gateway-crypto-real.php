@@ -9,12 +9,23 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
     protected $TIMEOUT_CHECK_PAYMENT_SECONDS = 90;
     protected $TIMEOUT_GENERATE_DEPIX = 30;
 
+    protected $DEBUG_CONSTRUCTOR = true;
+    protected $DEBUG_INITIALIZATION = true;
+    protected $DEBUG_CALLS_FUNCTION = true;
+    protected $DEBUG_GENERAL = true;
+
+    protected $DEBUG_API = true;
+
+
+
 
     public function __construct()
     {
         $this->init_settings();
-        // parent::__construct(); // Add this line to ensure proper initialization
-        //error_log('Crypto Real Depix Gateway Constructor called.');
+
+        if ($this->DEBUG_INITIALIZATION) {
+            error_log('Crypto Real Depix Gateway Constructor called.');
+        }
 
         $this->id                 = 'crypto_real_depix';
         $this->method_title       = __('Crypto Real Depix', 'crypto-real-depix');
@@ -34,8 +45,7 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
         $this->description        = $this->get_option('description');
         $this->instructions       = $this->get_option('instructions', $this->description); // Use description as default instructions
         $this->store_code_depix  = $this->get_option('store_code_depix');
-        $this->production          = $this->get_option('production', 'no'); // Add a production/sandbox toggle
-
+        $this->production          = $this->get_option('production', 'no'); 
         $this->enabled = $this->get_option('enabled');
         // Actions
         add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'process_admin_options'));
@@ -43,14 +53,20 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
         add_action('woocommerce_email_before_order_table', array($this, 'email_instructions'), 10, 3); // Add instructions to emails
         add_action('woocommerce_thankyou', [$this, 'display_qr_code_on_thankyou_page'], 10, 1);
 
-        // error_log('Enabled: ' . $this->enabled);
-        // error_log('Store Code Depix: ' . $this->store_code_depix);
+        if ($this->DEBUG_CONSTRUCTOR) {
+            error_log('Enabled: ' . $this->enabled);
+            error_log('Store Code Depix: ' . $this->store_code_depix);
+            error_log('Production: ' . $this->production);
+        }
     }
 
 
     public function init_form_fields()
     {
-        //error_log('Crypto Real Depix init_form_fields() called.');
+        if ($this->DEBUG_INITIALIZATION) {
+            //error_log('Crypto Real Depix Gateway Constructor called.');
+            error_log('Crypto Real Depix init_form_fields() called.');
+        }
         $this->form_fields = array(
             'enabled' => array(
                 'title'       => __('Enable/Disable', 'crypto-real-depix'),
@@ -102,7 +118,9 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
 
     public function process_payment($order_id)
     {
-        // error_log('Crypto Real Depix process_payment() called. Order ID: ' . $order_id);
+        if ($this->DEBUG_INITIALIZATION) {
+            error_log('Crypto Real Depix process_payment() called. Order ID: ' . $order_id);
+        }
 
         $order = wc_get_order($order_id);
         if (!$order) {
@@ -136,7 +154,9 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
 
 
 
-        // error_log('QR Code salvo no pedido. Aguardando usuário...');
+        if ($this->DEBUG_GENERAL) {
+            error_log('QR Code salvo no pedido. Aguardando usuário...');
+        }
 
         // Redireciona para a página de agradecimento
         return array(
@@ -150,10 +170,14 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
 
     public function is_available()
     {
-        // error_log('Verificando disponibilidade do gateway: ' . $this->id); // Adicione esta linha
+        if ($this->DEBUG_INITIALIZATION) {
+            error_log('Verificando disponibilidade do gateway: ' . $this->id); // Adicione esta linha
+        }
 
-        // error_log('is_available() - Store Code: ' . $this->store_code_depix);
-        // error_log('is_available() - Currency: ' . get_woocommerce_currency());
+        if ($this->DEBUG_GENERAL) {
+            error_log('is_available() - Store Code: ' . $this->store_code_depix);
+            error_log('is_available() - Currency: ' . get_woocommerce_currency());
+        }
 
         $is_available = parent::is_available();
 
@@ -169,7 +193,9 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
             }
         }
 
-        // error_log('is_available(): ' . ($is_available ? 'TRUE' : 'FALSE'));
+        if ($this->DEBUG_GENERAL) {
+            error_log('is_available(): ' . ($is_available ? 'TRUE' : 'FALSE'));
+        }
         return $is_available;
     }
 
@@ -177,20 +203,20 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
 
     public function process_checkout()
     {
-        // ... existing code ...
-        // error_log('process_checkout() called.');
-
+        if ($this->DEBUG_CALLS_FUNCTION) {
+            error_log('process_checkout() called.');
+        }
 
         $available_gateways = WC()->payment_gateways->get_available_payment_gateways();
 
-        // error_log('Available Payment Gateways:' . print_r(array_keys($available_gateways), true)); // Add this line
+        if ($this->DEBUG_GENERAL) {
+            error_log('Available Payment Gateways:' . print_r(array_keys($available_gateways), true)); // Add this line
+        }
 
         if (empty($available_gateways)) {
             wc_add_notice(__('There are no payment methods available. This may be an error on our side. Please contact us if you need any help placing your order.', 'woocommerce'), 'error');
             return false;
         }
-
-        // ... existing code ...
     }
 
 
@@ -247,13 +273,15 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
             'ip_origin' => $server_ip
         );
 
-        error_log('url: ' . $api_url);
+        if ($this->DEBUG_API) {
+            error_log('url: ' . $api_url);
+        }
 
         $response = wp_remote_post($api_url, array(
-            'timeout' => $this->TIMEOUT_GENERATE_DEPIX, 
-            'body'    => $post_data, 
+            'timeout' => $this->TIMEOUT_GENERATE_DEPIX,
+            'body'    => $post_data,
             'headers' => array(
-                'Content-Type' => 'application/x-www-form-urlencoded', 
+                'Content-Type' => 'application/x-www-form-urlencoded',
             ),
         ));
 
@@ -284,7 +312,9 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
         }
 
         if (isset($data['pix']['data']['response']['qrCopyPaste'])) {
-            error_log('Returning success ');
+            if ($this->DEBUG_API) {
+                error_log('Returning success ');
+            }
             return $data;
         } else {
             error_log('Depix API Response Error: Missing qr_code.  Response Data: ' . print_r($data, true));
@@ -513,7 +543,6 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
                         method: "GET",
                         contentType: "application/json", // Explicitly set JSON
                         dataType: "json", // Expect JSON response
-                        timeout: ' . $this->TIMEOUT_CHECK_PAYMENT_SECONDS * 1000 . ',
                         success: function(response) { 
                             console.log("Raw response:", response);
                             if (typeof response === "string") {
