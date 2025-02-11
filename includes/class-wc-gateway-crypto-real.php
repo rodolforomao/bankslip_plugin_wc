@@ -9,12 +9,12 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
     protected $TIMEOUT_CHECK_PAYMENT_SECONDS = 90;
     protected $TIMEOUT_GENERATE_DEPIX = 30;
 
-    protected $DEBUG_CONSTRUCTOR = true;
-    protected $DEBUG_INITIALIZATION = true;
-    protected $DEBUG_CALLS_FUNCTION = true;
-    protected $DEBUG_GENERAL = true;
+    protected $DEBUG_CONSTRUCTOR = false;
+    protected $DEBUG_INITIALIZATION = false;
+    protected $DEBUG_CALLS_FUNCTION = false;
+    protected $DEBUG_GENERAL = false;
 
-    protected $DEBUG_API = true;
+    protected $DEBUG_API = false;
 
 
 
@@ -553,7 +553,7 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
                             if (response.success && response.response) {
                                 const status = response.response[0].status; // Extract the status
                                 if (status === "paid") {
-                                    displayAlert("Paid successful.", "alert-success");
+                                    displayAlert("Pagamento confirmado.", "alert-success");
                                 }
                                 else
                                 {
@@ -580,8 +580,7 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
                             if (response.success && response.response) {
                                 const status = response.response[0].status; // Extract the status
                                 if (status === "paid") {
-                                    displayAlert("Paid successful.", "alert-success");
-
+                                    displayAlert("Pagamento confirmado.", "alert-success");
                                 }
                                 else
                                 {
