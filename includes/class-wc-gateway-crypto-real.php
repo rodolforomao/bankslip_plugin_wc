@@ -32,6 +32,7 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
         $this->supports           = array(
             'products',
         );
+        $this->icon               = apply_filters( 'crypto_real_depix',  esc_url(plugins_url("crypto-real-depix/assets/images/checkouts/pix/pix.svg")) );
 
         // Load the settings.
         $this->init_form_fields();
