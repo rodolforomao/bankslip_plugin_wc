@@ -17,8 +17,6 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
     protected $DEBUG_API = false;
 
 
-
-
     public function __construct()
     {
         $this->init_settings();
@@ -29,9 +27,8 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
 
         $this->id                 = 'crypto_real_depix';
         $this->method_title       = __('Crypto Real Depix', 'crypto-real-depix');
-        $this->method_description = __('Pagamento via Pix usando o Crypto Real Depix', 'crypto-real-depix');
-        $this->title              = __('Pagamento via Pix - Depix', 'crypto-real-depix'); // Default title.  User can override.
-        $this->has_fields         = false; // We don't need custom credit card fields.
+        $this->title              = __('Pagamento via Pix', 'crypto-real-depix');
+        $this->has_fields         = false;
         $this->supports           = array(
             'products',
         );
@@ -42,16 +39,16 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
 
         // Get settings
         $this->title              = $this->get_option('title');
-        $this->description        = $this->get_option('description');
-        $this->instructions       = $this->get_option('instructions', $this->description); // Use description as default instructions
         $this->store_code_depix  = $this->get_option('store_code_depix');
-        $this->production          = $this->get_option('production', 'no'); 
+        $this->production          = $this->get_option('production', 'no');
         $this->enabled = $this->get_option('enabled');
+
         // Actions
         add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'process_admin_options'));
-        // add_action('woocommerce_thankyou_' . $this->id, array($this, 'thankyou_page'));  // Display info on thank you page
-        add_action('woocommerce_email_before_order_table', array($this, 'email_instructions'), 10, 3); // Add instructions to emails
+        add_action('woocommerce_email_before_order_table', array($this, 'email_instructions'), 10, 3);
         add_action('woocommerce_thankyou', [$this, 'display_qr_code_on_thankyou_page'], 10, 1);
+
+        add_filter('woocommerce_gateway_description', array($this, 'filter_gateway_description'), 10, 2);
 
         if ($this->DEBUG_CONSTRUCTOR) {
             error_log('Enabled: ' . $this->enabled);
@@ -60,11 +57,9 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
         }
     }
 
-
     public function init_form_fields()
     {
         if ($this->DEBUG_INITIALIZATION) {
-            //error_log('Crypto Real Depix Gateway Constructor called.');
             error_log('Crypto Real Depix init_form_fields() called.');
         }
         $this->form_fields = array(
@@ -79,21 +74,7 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
                 'title'       => __('Title', 'crypto-real-depix'),
                 'type'        => 'text',
                 'description' => __('The title which the user sees during checkout.', 'crypto-real-depix'),
-                'default'     => __('Pagamento via Pix - Depix - Crypto', 'crypto-real-depix'), // More user-friendly default
-                'desc_tip'    => true,
-            ),
-            'description' => array(
-                'title'       => __('Description', 'crypto-real-depix'),
-                'type'        => 'textarea',
-                'description' => __('The description which the user sees during checkout.', 'crypto-real-depix'),
-                'default'     => __('Pague em reais através do PIX usando a rede cripto.', 'crypto-real-depix'),
-                'desc_tip'    => true,
-            ),
-            'instructions' => array(
-                'title'       => __('Instructions', 'crypto-real-depix'),
-                'type'        => 'textarea',
-                'description' => __('Instructions that will be added to the thank you page and emails.', 'crypto-real-depix'),
-                'default'     => __('You will receive a payment address shortly.', 'crypto-real-depix'),
+                'default'     => __('Pagamento via Pix', 'crypto-real-depix'),
                 'desc_tip'    => true,
             ),
             'store_code_depix' => array(
@@ -103,16 +84,36 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
                 'default'     => '',
                 'desc_tip'    => true,
             ),
-            'production' => array( // Added production/sandbox toggle
+            'production' => array(
                 'title'       => __('Production Mode', 'crypto-real-depix'),
                 'label'       => __('Enable Production Mode', 'crypto-real-depix'),
                 'type'        => 'checkbox',
                 'description' => __('Enable this when you are ready to accept real payments.', 'crypto-real-depix'),
-                'default'     => 'no', // Default to sandbox mode
+                'default'     => 'no',
                 'desc_tip'    => true,
             ),
-
         );
+
+        $this->instructions = __('You will receive a payment address shortly.', 'crypto-real-depix');
+
+        add_action('wp_enqueue_scripts', function () {
+            if (is_checkout()) {
+                wp_enqueue_script('custom-crypto-real-script', plugin_dir_url(__FILE__) . 'assets/js/custom-scripts.js', array('jquery'), null, true);
+            }
+        });
+    }
+
+    public function get_payment_description()
+    {
+        return __($this->getHtmlPix(), 'crypto-real-depix');
+    }
+
+    public function filter_gateway_description($description, $payment_id)
+    {
+        if ($payment_id === $this->id) {
+            return $this->get_payment_description();
+        }
+        return $description;
     }
 
 
@@ -364,268 +365,206 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
         $depixid = get_post_meta($order_id, '_depixid', true);
         if (!$depixid) return;
 
-        $order_id = get_post_meta($order_id, '_orderid', true);
-        if (!$order_id) return;
-
+        $order_id_meta = get_post_meta($order_id, '_orderid', true); // Renomeando para evitar conflito
+        if (!$order_id_meta) return;
 
         // Gera o link para exibição do QR Code
         $qr_code_url = 'https://quickchart.io/qr?text=' . urlencode($qr_code) . '&size=300';
 
-        // Exibir o conteúdo do modal com botão para abrir
-        echo '
-    <button id="openPixModalButton" onclick="openPixModal()" style="margin-top: 20px; padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer;">
-        ' . __('Ver QR Code Pix', 'crypto-real-depix') . '
-    </button>
-    
-    <div id="pixModal" class="modal" style="display:block;">
-        <div class="modal-content" style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
-            <span class="close" id="closeModal">&times;</span>
-            <h3>' . __('Pix Payment QR Code', 'crypto-real-depix') . '</h3>
-            <img src="' . esc_url($qr_code_url) . '" alt="Pix Payment QR Code" style="max-width: 100%; height: auto;"/>
-            <p>' . __('Escaneie este QR Code para efetuar o pagamento.', 'crypto-real-depix') . '</p>
-    
-            <p id="pixCodeText" style="margin-top: 20px; overflow-wrap: anywhere;">' . esc_html($qr_code) . '</p>
-            <div id="alert-container">
-            </div>
-    
-            <div class="modal-footer">
-                <button type="button" style="margin-top: 20px; padding: 10px 20px; background-color: #4c74af; color: white; border: none; cursor: pointer;" id="waiting-payment">Verificar pagamento</button>
-                <button id="copyPixButton" onclick="copyPixCode()" style="margin-top: 20px; padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer;">
-                    ' . __('Copiar Pix Copia e Cola', 'crypto-real-depix') . '
-                </button>
-                <button type="button" id="closeButton" style="margin-top: 20px; padding: 10px 20px; background-color: #b33434; color: white; border: none; cursor: pointer;" class="btn btn-secondary">
-                    ' . __('Fechar', 'crypto-real-depix') . '
-                </button>
-            </div>
-        </div>
-    </div>';
+        // --- Início das modificações ---
 
-        // CSS para o modal
-        echo '
-    <style>
-        .modal {
-            display: block;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            overflow: auto;
-            background-color: rgba(0,0,0,0.5);
-        }
-        .modal-content {
-            background-color: white;
-            margin: 15% auto;
-            padding: 20px;
-            border: 1px solid #888;
-            width: 50%;
+        // Estilos CSS inline (para garantir que funcionem mesmo sem um arquivo CSS externo)
+        echo '<style>
+        #pix-container {
             text-align: center;
-            border-radius: 10px;
+            margin-top: 20px;
         }
-        .close {
-            color: #aaa;
-            float: right;
-            font-size: 28px;
-            font-weight: bold;
+        #pix-container img {
+            max-width: 100%;
+            height: auto;
+        }
+        #pix-container button {
+            margin: 10px;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
             cursor: pointer;
         }
-        .close:hover {
-            color: black;
+        #pix-container #pixCodeText {
+            margin-top: 20px;
+            overflow-wrap: anywhere;
         }
-    </style>';
-
-        $production = $this->production === 'yes'; // Check the production mode setting
-        if ($production) {
-            $api_url_base_url = "https://rodolforomao.com.br/finances/public";
-        } else {
-            $api_url_base_url = "http://localhost:8000";
+        #pix-container #alert-container {
+            margin-top: 10px;
         }
-
-        echo '<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/crypto-js.js"></script>';
-
-        // Then, load jQuery if needed
-        echo '<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>';
-
-        echo '
-        
-        <script>
-            document.addEventListener("DOMContentLoaded", function () {
-                var modal = document.getElementById("pixModal");
-                var closeButton = document.getElementById("closeButton");
-                var closeModal = document.getElementById("closeModal");
-                var openButton = document.getElementById("openPixModalButton");
-    
-                // Função para abrir o modal
-                window.openPixModal = function() {
-                    modal.style.display = "block";
-                };
-    
-                // Fecha o modal ao clicar no "X" ou no botão "Fechar"
-                closeButton.onclick = function() {
-                    modal.style.display = "none";
-                };
-                closeModal.onclick = function () {
-                    modal.style.display = "none";
-                };
-    
-                // Fecha o modal ao clicar fora dele
-                window.onclick = function (event) {
-                    if (event.target == modal) {
-                        modal.style.display = "none";
-                    }
-                };
-    
-                // Função para copiar o código Pix
-                window.copyPixCode = function() {
-                    var copyText = document.getElementById("pixCodeText");
-    
-                    // Cria um elemento de input temporário
-                    var tempInput = document.createElement("input");
-                    tempInput.value = copyText.textContent || copyText.innerText;
-    
-                    // Adiciona o input ao body, seleciona e copia
-                    document.body.appendChild(tempInput);
-                    tempInput.select();
-                    tempInput.setSelectionRange(0, 99999); // Para dispositivos móveis
-    
-                    // Copia o texto
-                    document.execCommand("copy");
-    
-                    // Remove o input temporário
-                    document.body.removeChild(tempInput);
-    
-                    // Exibe uma mensagem de sucesso (opcional)
-                    alert("' . __('Texto copiado com sucesso!', 'crypto-real-depix') . '");
-                };
-    
-                // Função para verificar o pagamento
-                var clicked = false;
-                document.getElementById("waiting-payment").addEventListener("click", function() {
-                    if (!clicked) {
-                        clicked = true;
-                        const button = this;
-                        button.disabled = true;
-                        button.innerHTML = "<span class=\'spinner-border spinner-border-sm\' role=\'status\' aria-hidden=\'true\'></span> Aguardando...";
-    
-                        // Chamar a função de verificação de pagamento
-                        checkPayment();
-                    }
-                });
-    
-                function generateSignature(payload) {
-                    const secret = "6s5df4g8sdf7h65fg4fg-dfghdf54gh6df"; // Substitua pela chave secreta real usada para o hash
-                    const payloadString = JSON.stringify(payload); // Converte o payload em uma string
-                    const signature = CryptoJS.HmacSHA256(payloadString, secret).toString(CryptoJS.enc.Base64);
-                    return signature;
-                }
-    
-                function checkPayment() {
-                    const payload = {
-                        boletoId: "' . $depixid . '"
-                    };
-
-                function displayAlert(message, className) {
-                        // Create the div for the alert
-                        const alertDiv = document.createElement("div");
-                        alertDiv.classList.add("alert", className);
-                        alertDiv.textContent = message;
-                    
-                        // Append the alert to the alert container
-                        const alertContainer = document.getElementById("alert-container");
-                        alertContainer.innerHTML = "";
-                        alertContainer.appendChild(alertDiv);
-                    }
-    
-    
-                    $.ajax({
-                        url: "/wp-json/crypto-real-depix/v1/check-payment?depixId=' . urlencode($depixid) . '&orderId=' . urlencode($order_id) . '" ,
-                        method: "GET",
-                        contentType: "application/json", // Explicitly set JSON
-                        dataType: "json", // Expect JSON response
-                        success: function(response) { 
-                            console.log("Raw response:", response);
-                            if (typeof response === "string") {
-                                response = JSON.parse(response);
-                            }
-                            console.log("Parsed response:", response);
-                            globalResponse = response;
-                            if (response.success && response.response) {
-                                const status = response.response[0].status; // Extract the status
-                                if (status === "paid") {
-                                    displayAlert("Pagamento confirmado.", "alert-success");
-                                }
-                                else
-                                {
-                                displayAlert("Pagamento não confirmado. nº 1001", "alert-warning");
-
-                                }
-                            } else {
-                                displayAlert("Pagamento não confirmado. nº 1002", "alert-warning");
-                            }
-                            clicked = false;
-                            document.getElementById("waiting-payment").innerHTML = "Verificar pagamento";
-                            document.getElementById("waiting-payment").disabled = false;
-                        }
-                    });
-                    /*
-                    $.ajax({
-                        url: "' . $api_url_base_url . '/check-bank-slip-paid-by-id?depixId=' . urlencode($depixid) . '&orderId=' . urlencode($order_id) . '",
-                        method: "GET",
-                        contentType: "application/json", // Set content type to JSON
-                        dataType: "json", // Expect JSON response
-                        success: function(response) {
-                            debugger
-                            // Aqui, você pode atualizar a interface com base na resposta
-                            if (response.success && response.response) {
-                                const status = response.response[0].status; // Extract the status
-                                if (status === "paid") {
-                                    displayAlert("Pagamento confirmado.", "alert-success");
-                                }
-                                else
-                                {
-                                    displayAlert("Pagamento não confirmado. nº 01001", "alert-danger");
-
-                                }
-                            } else {
-                                displayAlert("Pagamento não confirmado. nº 01002", "alert-danger");
-                            }
-                            clicked = false;
-                            document.getElementById("waiting-payment").innerHTML = "Verificar pagamento";
-                            document.getElementById("waiting-payment").disabled = false;
-                        },
-                        error: function() {
-                            alert("Erro ao verificar pagamento.");
-                            clicked = false;
-                            document.getElementById("waiting-payment").innerHTML = "Verificar pagamento";
-                            document.getElementById("waiting-payment").disabled = false;
-                        }
-                    });
-                    */
-                }
-            });
-        </script>
-        
-        <style>
-        .alert {
+        .waiting-payment-button{
+           background-color: #4c74af;
+        }
+        #pix-container .alert {
             padding: 10px;
             margin: 10px;
             border-radius: 5px;
             font-size: 16px;
         }
-        
-        .alert-danger {
+        #pix-container .alert-danger {
             background-color: red;
             color: white;
         }
-        .alert-success {
+        #pix-container .alert-success {
             background-color: green;
             color: white;
         }
-        .alert-warning{
+        #pix-container .alert-warning {
             background-color: yellow;
             color: black;
         }
-        </style>';
+    </style>';
+
+        // HTML para exibir o QR Code e os botões diretamente na página
+        echo '<div id="pix-container" style="text-align: -webkit-center;">';
+
+        echo '<h3>' . __('Pagamento Pix - QR Code', 'crypto-real-depix') . '</h3>';
+        echo '<img src="' . esc_url($qr_code_url) . '" alt="Pix Payment QR Code" />';
+        echo '<p>' . __('Escaneie este QR Code para efetuar o pagamento.', 'crypto-real-depix') . '</p>';
+        echo '<p id="pixCodeText">' . esc_html($qr_code) . '</p>';
+        echo '<div id="alert-container"></div>';
+        echo '<button type="button" class="waiting-payment-button">' . __('Verificar pagamento', 'crypto-real-depix') . '</button>';
+        echo '<button type="button" id="copyPixButton">' . __('Copiar Pix Copia e Cola', 'crypto-real-depix') . '</button>';
+        echo '<img src="' . esc_url(plugins_url("crypto-real-depix/assets/images/checkouts/pix/pix.png")) . '" 
+        alt="Pix Logo" 
+        style="position: absolute; right: 10%; top: 50%; width: 15%;">';
+
+        echo '</div>';
+
+        // JavaScript para copiar o código Pix e verificar o pagamento
+        echo '<script>
+        if (typeof jQuery == "undefined") {
+            console.error("jQuery não está carregado! O plugin Crypto Real Depix não funcionará corretamente.");
+        } else {
+            jQuery.noConflict();
+            (function($) {
+                
+
+                $(document).ready(function() {
+                    // Função para copiar o código Pix
+                    $("#copyPixButton").on("click", function() {
+                        var pixCodeText = $("#pixCodeText").text();
+                        var tempInput = $("<textarea>");
+                        tempInput.val(pixCodeText);
+                        $("body").append(tempInput);
+                        tempInput.select();
+                        document.execCommand("copy");
+                        tempInput.remove();
+                        alert("' . __('Código Pix copiado para a área de transferência!', 'crypto-real-depix') . '");
+                    });
+
+                    // Variável para controlar se o botão já foi clicado
+                    var clicked = false;
+
+                    // Função para verificar o pagamento
+                    $(".waiting-payment-button").on("click", function() {
+                        if (!clicked) {
+                            clicked = true;
+                            const button = this;
+                            button.disabled = true;
+                            button.innerHTML = "<span class=\'spinner-border spinner-border-sm\' role=\'status\' aria-hidden=\'true\'></span> Aguardando...";
+
+                            // Função para exibir alertas (movida para fora do $(document).ready())
+                            function displayAlert(message, className) {
+                                const alertContainer = document.getElementById("alert-container");
+                                alertContainer.innerHTML = "";
+                                const alertDiv = jQuery("<div>").addClass("alert " + className).text(message); // Cria uma nova div jQuery
+                                jQuery(alertContainer).append(alertDiv); // Adiciona a nova div ao container
+                            }
+
+                            // Chamada AJAX para verificar o pagamento
+                            $.ajax({
+                                url: "/wp-json/crypto-real-depix/v1/check-payment?depixId=' . urlencode($depixid) . '&orderId=' . urlencode($order_id_meta) . '" ,
+                                method: "GET",
+                                contentType: "application/json",
+                                dataType: "json",
+                                async: true,
+                                success: function(response) {
+                                    console.log("Raw response:", response);
+                                    if (typeof response === "string") {
+                                        response = JSON.parse(response);
+                                    }
+                                    console.log("Parsed response:", response);
+                                    globalResponse = response;
+                                    if (response.success && response.response) {
+                                        const status = response.response[0].status;
+                                        if (status === "paid") {
+                                            displayAlert("Pagamento confirmado.", "alert-success");
+                                        }
+                                        else
+                                        {
+                                        displayAlert("Pagamento não confirmado. nº 1001", "alert-warning");
+
+                                        }
+                                    } else {
+                                        displayAlert("Pagamento não confirmado. nº 1002", "alert-warning");
+                                    }
+                                    clicked = false;
+                                    button.innerHTML = "Verificar pagamento";
+                                    button.disabled = false;
+                                },
+                                error: function(xhr, status, error) {
+                                    console.error("Erro na chamada AJAX:", error);
+                                    displayAlert("Erro ao verificar o pagamento. Tente novamente mais tarde.", "alert-danger");
+                                    clicked = false;
+                                    button.innerHTML = "Verificar pagamento";
+                                    button.disabled = false;
+                                }
+                            });
+                        }
+                    });
+                });
+            })(jQuery);
+        }
+    </script>';
+
+        // --- Fim das modificações ---
+    }
+
+
+
+
+
+    private function getHtmlPix()
+    {
+
+        $site_url = get_site_url(); // Obtém dinamicamente o endereço base do site
+
+        return wp_kses_post('
+        <div class="payment_box payment_method_woo-mercado-pago-pix">
+            <div class="mp-checkout-container">
+                <div class="mp-checkout-pix-container" style="text-align: -webkit-center;">
+                    <pix-template 
+                        title="Pague de forma segura e instantânea" 
+                        subtitle="Ao confirmar a compra, nós vamos te mostrar o código para fazer o pagamento." 
+                        alt="Logo Pix" 
+                        src="' . esc_url($site_url . '/wp-content/plugins/crypto-real-depix/assets/images/checkouts/pix/pix.png?ver=7.9.4') . '">
+                        <div class="mp-pix-template-container">
+                            <img class="mp-pix-template-image" src="' . esc_url($site_url . '/wp-content/plugins/crypto-real-depix/assets/images/checkouts/pix/pix.png?ver=7.9.4') . '" alt="Logo Pix" loading="lazy">
+                            <p class="mp-pix-template-title">Pague de forma segura e instantânea</p>
+                            <p class="mp-pix-template-subtitle">Ao confirmar a compra, nós vamos te mostrar o código para fazer o pagamento.</p>
+                        </div>
+                    </pix-template>
+                    <div class="mp-checkout-pix-terms-and-conditions">
+                        <terms-and-conditions 
+                            description="Ao continuar, você concorda com nossos" 
+                            link-text="Termos e condições" 
+                            link-src="' . esc_url("https://www.mercadopago.com.br/ajuda/termos-e-politicas_194") . '">
+                            <div class="mp-terms-and-conditions-container">
+                                <span class="mp-terms-and-conditions-text">Ao continuar, você concorda com nossos</span>
+                                <a class="mp-terms-and-conditions-link" href="' . esc_url("https://www.mercadopago.com.br/ajuda/termos-e-politicas_194") . '" target="_blank">Termos e condições</a>
+                            </div>
+                        </terms-and-conditions>
+                    </div>
+                </div>
+            </div>
+        </div>
+    ');
     }
 }
