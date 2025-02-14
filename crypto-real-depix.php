@@ -4,7 +4,7 @@
  * Plugin Name: Crypto Real Depix
  * Plugin URI: https://www.rodolforomao.com.br
  * Description: Plugin de pagamento em criptomoedas para WooCommerce - Pagamentos através do Pix usando a moeda Depix.
- * Version: 0.01.003
+ * Version: 0.01.004
  * Author: Strong Head
  * Author URI: https://www.rodolforomao.com.br
  * License: GPL2
