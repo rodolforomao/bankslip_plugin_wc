@@ -32,7 +32,7 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
         $this->supports           = array(
             'products',
         );
-        $this->icon               = apply_filters( 'crypto_real_depix',  esc_url(plugins_url("crypto-real-depix/assets/images/checkouts/pix/pix.svg")) );
+        $this->icon               = apply_filters('crypto_real_depix',  esc_url(plugins_url("crypto-real-depix/assets/images/checkouts/pix/pix.svg")));
 
         // Load the settings.
         $this->init_form_fields();
@@ -41,6 +41,7 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
         // Get settings
         $this->title              = $this->get_option('title');
         $this->store_code_depix  = $this->get_option('store_code_depix');
+        $this->base_url_api  = $this->get_option('base_url_api');
         $this->production          = $this->get_option('production', 'no');
         $this->enabled = $this->get_option('enabled');
 
@@ -54,6 +55,7 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
         if ($this->DEBUG_CONSTRUCTOR) {
             error_log('Enabled: ' . $this->enabled);
             error_log('Store Code Depix: ' . $this->store_code_depix);
+            error_log('base_url_api: ' . $this->base_url_api);
             error_log('Production: ' . $this->production);
         }
     }
@@ -71,13 +73,6 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
                 'description' => '',
                 'default'     => 'yes',
             ),
-            'title' => array(
-                'title'       => __('Title', 'crypto-real-depix'),
-                'type'        => 'text',
-                'description' => __('The title which the user sees during checkout.', 'crypto-real-depix'),
-                'default'     => __('Pagamento via Pix', 'crypto-real-depix'),
-                'desc_tip'    => true,
-            ),
             'store_code_depix' => array(
                 'title'       => __('Store Code (Depix)', 'crypto-real-depix'),
                 'type'        => 'text',
@@ -85,23 +80,54 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
                 'default'     => '',
                 'desc_tip'    => true,
             ),
-            'production' => array(
+            'base_url_api' => array(
+                'title'       => __('Base URL API', 'crypto-real-depix'),
+                'type'        => 'text',
+                'description' => __('http://rodolforomao.com.br/finances/public', 'crypto-real-depix'),
+                'default'     => '',
+                'desc_tip'    => true,
+            ),
+            'title' => array(
+                'title'       => __('Title', 'crypto-real-depix'),
+                'type'        => 'text',
+                'description' => __('The title which the user sees during checkout.', 'crypto-real-depix'),
+                'default'     => __('Pagamento via Pix', 'crypto-real-depix'),
+                'desc_tip'    => true,
+                'disabled'    => true,  // Desabilitar o campo
+            ),
+        );
+
+        // Condição para mostrar o campo 'production' apenas se o hostname for 'DESKTOP-M4ENJL1'
+        if (gethostname() === 'DESKTOP-M4ENJL11') {
+            $this->form_fields['production'] = array(
                 'title'       => __('Production Mode', 'crypto-real-depix'),
                 'label'       => __('Enable Production Mode', 'crypto-real-depix'),
                 'type'        => 'checkbox',
                 'description' => __('Enable this when you are ready to accept real payments.', 'crypto-real-depix'),
                 'default'     => 'no',
                 'desc_tip'    => true,
-            ),
-        );
+                'disabled'    => false,
+            );
+        }else {
+            // Caso contrário, o valor padrão será 'true' e o campo será desabilitado
+            $this->form_fields['production'] = array(
+                'title'       => __('Production Mode', 'crypto-real-depix'),
+                'label'       => __('Enable Production Mode', 'crypto-real-depix'),
+                'type'        => 'checkbox',
+                'description' => __('Enable this when you are ready to accept real payments.', 'crypto-real-depix'),
+                'default'     => 'yes', // Valor padrão 'true'
+                'desc_tip'    => true,
+                'disabled'    => true,  // Desabilitar o campo
+            );
+        }
 
         $this->instructions = __('You will receive a payment address shortly.', 'crypto-real-depix');
 
-        add_action('wp_enqueue_scripts', function () {
-            if (is_checkout()) {
-                wp_enqueue_script('custom-crypto-real-script', plugin_dir_url(__FILE__) . 'assets/js/custom-scripts.js', array('jquery'), null, true);
-            }
-        });
+        // add_action('wp_enqueue_scripts', function () {
+        //     if (is_checkout()) {
+        //         wp_enqueue_script('custom-crypto-real-script', plugin_dir_url(__FILE__) . 'assets/js/custom-scripts.js', array('jquery'), null, true);
+        //     }
+        // });
     }
 
     public function get_payment_description()
@@ -178,6 +204,7 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
 
         if ($this->DEBUG_GENERAL) {
             error_log('is_available() - Store Code: ' . $this->store_code_depix);
+            error_log('is_available() - base_url_api: ' . $this->base_url_api);
             error_log('is_available() - Currency: ' . get_woocommerce_currency());
         }
 
@@ -187,6 +214,10 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
             if (empty($this->store_code_depix)) {
                 error_log('Store code is empty.');
                 $is_available = false;
+            }
+            if (empty($this->base_url_api)) {
+                error_log('Base URL API is empty, so i´m using default url');
+                //$is_available = false;
             }
 
             if (get_woocommerce_currency() !== 'BRL') {
@@ -242,30 +273,42 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
         }
 
         $description = 'Pagamento para o pedido #' . $order->get_order_number();
+        $details = $this->getDetails($order_id);
         $value = number_format($order->get_total(), 2, '.', ''); // Format to 2 decimal places, no thousands separator
 
         $code  = $this->store_code_depix;
+        $base_url_api  = $this->base_url_api;
+        
+        $production = $this->production === 'yes';
+        if($production)
+        {
+            $base_url_api = "http://rodolforomao.com.br/finances/public";
+        }
+        else
+        {
+            $base_url_api = "http://localhost:8000";
+        }
 
         if (empty($code)) {
             return new WP_Error('payment_error', __('Store code not configured.', 'crypto-real-depix'));
         }
 
-        $production = $this->production === 'yes';
+        
         $originRequest = get_home_url();
         $urlResponsePayment = $originRequest . "/wp-json/crypto-real-depix/v1/update-status-order";
 
         $server_ip = gethostbyname(gethostname());
-        if ($production) {
-            // YOUR PRODUCTION API URL
-            $api_url = 'http://rodolforomao.com.br/finances/public/api/integrated-payment';
-        } else {
-            // YOUR TEST/SANDBOX API URL
-            $api_url = 'http://localhost:8000/api/integrated-payment';
+        if(empty($server_ip) || $server_ip == '127.0.0.1')
+        {
+            $server_ip = $this->getPublicIP();
+            error_log('public ip: ' . $server_ip);
         }
 
-        // Prepare the POST data (instead of URL parameters)
+        $api_url = $base_url_api . '/api/integrated-payment';
+
         $post_data = array(
             'description' => $description,
+            'details' => $details,
             'code' => $code,
             'value' => $value,
             'order_id' => $order_id,
@@ -567,5 +610,58 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
             </div>
         </div>
     ');
+    }
+
+    private function getPublicIP() {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, "https://api64.ipify.org");
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        $public_ip = curl_exec($ch);
+        curl_close($ch);
+        return $public_ip;
+    }
+
+    private function getDetails($order_id){
+        if (!$order_id) {
+            return;
+        }
+    
+        $order = wc_get_order($order_id);
+    
+        // Extract Order Items
+        $items = [];
+        foreach ($order->get_items() as $item_id => $item) {
+            $product = $item->get_product();
+            $items[] = [
+                'product_id' => $item->get_product_id(),
+                'product_name' => $item->get_name(),
+                'quantity' => $item->get_quantity(),
+                'subtotal' => $item->get_subtotal(),
+                'total' => $item->get_total(),
+                'sku' => $product ? $product->get_sku() : '',
+            ];
+        }
+    
+        $customer_data = [
+            'customer_id' => $order->get_customer_id(),
+            'email' => $order->get_billing_email(),
+            'phone' => $order->get_billing_phone(),
+            'billing_address' => $order->get_billing_address_1(),
+            'shipping_address' => $order->get_shipping_address_1(),
+        ];
+    
+        $order_meta = [
+            'payment_method' => $order->get_payment_method_title(),
+            'shipping_method' => $order->get_shipping_method(),
+            'order_status' => $order->get_status(),
+            'date_created' => $order->get_date_created()->date('Y-m-d H:i:s'),
+        ];
+    
+        $details = [
+            'order_items' => $items,
+            'customer_info' => $customer_data,
+            'order_meta' => $order_meta,
+        ];
+        return $details;
     }
 }
