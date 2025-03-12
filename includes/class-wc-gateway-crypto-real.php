@@ -95,39 +95,16 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
                 'desc_tip'    => true,
                 'disabled'    => true,  // Desabilitar o campo
             ),
+            'production' => array(
+                'title'       => __('Production Mode', 'crypto-real-depix'),
+                'type'        => 'checkbox',
+                'description' => __('Enable Production Mode', 'crypto-real-depix'),
+                'default'     => 'yes',
+                'desc_tip'    => true,
+            ),
         );
 
-        // Condição para mostrar o campo 'production' apenas se o hostname for 'DESKTOP-M4ENJL1'
-        if (gethostname() === 'DESKTOP-M4ENJL11') {
-            $this->form_fields['production'] = array(
-                'title'       => __('Production Mode', 'crypto-real-depix'),
-                'label'       => __('Enable Production Mode', 'crypto-real-depix'),
-                'type'        => 'checkbox',
-                'description' => __('Enable this when you are ready to accept real payments.', 'crypto-real-depix'),
-                'default'     => 'no',
-                'desc_tip'    => true,
-                'disabled'    => false,
-            );
-        }else {
-            // Caso contrário, o valor padrão será 'true' e o campo será desabilitado
-            $this->form_fields['production'] = array(
-                'title'       => __('Production Mode', 'crypto-real-depix'),
-                'label'       => __('Enable Production Mode', 'crypto-real-depix'),
-                'type'        => 'checkbox',
-                'description' => __('Enable this when you are ready to accept real payments.', 'crypto-real-depix'),
-                'default'     => 'yes', // Valor padrão 'true'
-                'desc_tip'    => true,
-                'disabled'    => true,  // Desabilitar o campo
-            );
-        }
-
         $this->instructions = __('You will receive a payment address shortly.', 'crypto-real-depix');
-
-        // add_action('wp_enqueue_scripts', function () {
-        //     if (is_checkout()) {
-        //         wp_enqueue_script('custom-crypto-real-script', plugin_dir_url(__FILE__) . 'assets/js/custom-scripts.js', array('jquery'), null, true);
-        //     }
-        // });
     }
 
     public function get_payment_description()
@@ -523,44 +500,64 @@ class WC_Gateway_Crypto_Real extends WC_Payment_Gateway
                             }
 
                             // Chamada AJAX para verificar o pagamento
-                            $.ajax({
-                                url: "/wp-json/crypto-real-depix/v1/check-payment?depixId=' . urlencode($depixid) . '&orderId=' . urlencode($order_id_meta) . '" ,
+                            const url = `'.  esc_url(get_home_url()) .'/wp-json/crypto-real-depix/v1/check-payment?depixId=' . urlencode($depixid) . '&orderId=' . urlencode($order_id_meta) . '`;
+                            fetch(url, {
                                 method: "GET",
-                                contentType: "application/json",
-                                dataType: "json",
-                                async: true,
-                                success: function(response) {
-                                    console.log("Raw response:", response);
-                                    if (typeof response === "string") {
-                                        response = JSON.parse(response);
-                                    }
-                                    console.log("Parsed response:", response);
-                                    globalResponse = response;
-                                    if (response.success && response.response) {
-                                        const status = response.response[0].status;
-                                        if (status === "paid") {
-                                            displayAlert("Pagamento confirmado.", "alert-success");
-                                        }
-                                        else
-                                        {
-                                        displayAlert("Pagamento não confirmado. nº 1001", "alert-warning");
-
-                                        }
-                                    } else {
-                                        displayAlert("Pagamento não confirmado. nº 1002", "alert-warning");
-                                    }
-                                    clicked = false;
-                                    button.innerHTML = "Verificar pagamento";
-                                    button.disabled = false;
-                                },
-                                error: function(xhr, status, error) {
-                                    console.error("Erro na chamada AJAX:", error);
-                                    displayAlert("Erro ao verificar o pagamento. Tente novamente mais tarde.", "alert-danger");
-                                    clicked = false;
-                                    button.innerHTML = "Verificar pagamento";
-                                    button.disabled = false;
+                                headers: {
+                                    "Content-Type": "application/json"
                                 }
+                            })
+                            .then(response => {
+                                if (!response.ok) {
+                                    throw new Error(`HTTP error! Status: ${response.status}`);
+                                }
+                            
+                                // Check if the response is JSON or HTML
+                                const contentType = response.headers.get("Content-Type");
+                            
+                                if (contentType && contentType.includes("application/json")) {
+                                    return response.json();  // Parse as JSON
+                                } else {
+                                    return response.text();  // Parse as text (HTML error page)
+                                }
+                            })
+                            .then(response => {
+                                if (typeof response === "string") {
+                                    console.log("Error page or unexpected response:", response);
+                                    displayAlert("Erro inesperado ao verificar o pagamento.", "alert-danger");
+                                    clicked = false;
+                                    button.innerHTML = "Verificar pagamento";
+                                    button.disabled = false;
+                                    return;
+                                }
+                            
+                                console.log("Parsed response:", response);
+                                globalResponse = response;
+                            
+                                // Check for the success and response keys
+                                if (response.success && response.response) {
+                                    const status = response.response[0].status;
+                                    if (status === "paid") {
+                                        displayAlert("Pagamento confirmado.", "alert-success");
+                                    } else {
+                                        displayAlert("Pagamento não confirmado. nº 1001", "alert-warning");
+                                    }
+                                } else {
+                                    displayAlert("Pagamento não confirmado. nº 1002", "alert-warning");
+                                }
+                            
+                                clicked = false;
+                                button.innerHTML = "Verificar pagamento";
+                                button.disabled = false;
+                            })
+                            .catch(error => {
+                                console.error("Erro na chamada:", error);
+                                displayAlert("Erro ao verificar o pagamento. Tente novamente mais tarde.", "alert-danger");
+                                clicked = false;
+                                button.innerHTML = "Verificar pagamento";
+                                button.disabled = false;
                             });
+                            
                         }
                     });
                 });

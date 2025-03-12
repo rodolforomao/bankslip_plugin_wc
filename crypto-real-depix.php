@@ -21,7 +21,7 @@ $DEBUG_CONSTRUCTOR = false;
 $DEBUG_INITIALIZATION = false;
 $DEBUG_CALLS_FUNCTION = false;
 $DEBUG_GENERAL = false;
-$DEBUG_API = false;
+$DEBUG_API = true;
 
 
 // Check if WooCommerce is active.  This is the correct way to do dependency checks.
@@ -128,13 +128,16 @@ add_action('rest_api_init', function () {
             }
 
             if ($production === 'yes') {
-                $url = "https://rodolforomao.com.br/finances/public/check-bank-slip-paid-by-id?depixId={$depixId}&orderId={$orderId}";
+                $url = "https://rodolforomao.com.br/finances/public/api/check-bank-slip-paid-by-id?depixId=". $depixId. "&orderId=". $orderId;
             } else {
-                $url = "http://localhost:8000/check-bank-slip-paid-by-id?depixId={$depixId}&orderId={$orderId}";
+                $url = "http://localhost:8000/api/check-bank-slip-paid-by-id?depixId=". $depixId. "&orderId=". $orderId;
             }
             $args = [
                 'timeout' => 90
             ];
+            
+            error_log("url: {$url}");
+            
             if ($DEBUG_API) {
                 error_log("url: {$url}");
             }
@@ -147,11 +150,23 @@ add_action('rest_api_init', function () {
             }
 
             $body = wp_remote_retrieve_body($response);
+            
+            error_log("Response body: " . print_r($body, true));
+
             if ($DEBUG_API) {
-                error_log("Response body: " . print_r($body, true));
             }
 
-            return rest_ensure_response($body);
+            if (is_string($body)) {
+                $decoded_body = json_decode($body, true);
+
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    return rest_ensure_response($decoded_body);
+                } else {
+                    return new WP_Error('invalid_json', 'Response is not valid JSON', ['status' => 500]);
+                }
+            } else {
+                return new WP_Error('invalid_response', 'Received response is not a valid JSON string', ['status' => 500]);
+            }
         }
     ]);
 });
